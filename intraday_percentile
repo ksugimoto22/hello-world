@@ -218,7 +218,6 @@ from IPython.display import display
 import bqviz as bqv
 import pandas as pd
 from datetime import date,datetime,timedelta
-from tia.bbg import LocalTerminal as lt
 from bqviz.base_plots import VBox,HBox,LinePlot,BB_CLRS,Layout,BQV_LAYOUTS
 
 
