@@ -1,4 +1,5 @@
 import blpapi
+import numpy as np
 from datetime import date,datetime,timedelta
 
 BAR_DATA = blpapi.Name("barData")
@@ -19,22 +20,35 @@ SECURITY_DATA = blpapi.Name("securityData")
 FIELD_DATA = blpapi.Name("fieldData")
 
 class bbgRequest():
+    
+    #Results
+    class intradayBarResultsClass():
+        def __init__(self):
+            self.data=[]        
+            self.columns=['security','time', 'open', 'high', 'low', 'close','numEvents', 'volume']
+        def as_frame(self):
+            return pd.DataFrame(self.data,columns=self.columns)
+        def clear(self):
+            self.data=[]
 
+    class referenceDataResultsClass(intradayBarResultsClass):
+        def __init__(self):
+            self.data=[]
+            self.columns=['security','field', 'value']
+
+        
     def __init__(self):
 
         sessionOptions = blpapi.SessionOptions()
         sessionOptions.setServerHost("localhost")
         sessionOptions.setServerPort(8194)
 
-        #storage for results
-        self.intradayBarResults=[]
-        self.intradayBarColumns=['security','time', 'open', 'high', 'low', 'close','numEvents', 'volume']
-        self.referenceDataResults=[]
-        self.referenceDataColumns=['security','field', 'value']
-
+        
         # Create a Session
         self.session = blpapi.Session(sessionOptions)
-
+        self.intradayBarResults=self.intradayBarResultsClass()
+        self.referenceDataResults=self.referenceDataResultsClass()
+        
         # Start a Session
         if not self.session.start():
             print("Failed to start session.")
@@ -56,12 +70,10 @@ class bbgRequest():
 
         self.session.stop()
         
-    def clearReferenceResult(self):
-        self.referenceDataResults=[]
+    def clearAll(self):
+        self.referenceDataResults.clear()        
+        self.intradayBarResults.clear()
         
-    def clearIntradayBarResult(self):
-        self.intradayBarResults=[]
-
     def printErrorInfo(self,leadingStr, errorInfo):
         print("%s%s (%s)" % (leadingStr, errorInfo.getElementAsString(CATEGORY),
                              errorInfo.getElementAsString(MESSAGE)))
@@ -69,7 +81,7 @@ class bbgRequest():
     def processIntradayBarResponseEvent(self,event,sid):
         for msg in event:
             if msg.hasElement(RESPONSE_ERROR):
-                printErrorInfo("REQUEST FAILED: ", msg.getElement(RESPONSE_ERROR))
+                self.printErrorInfo("REQUEST FAILED: ", msg.getElement(RESPONSE_ERROR))
                 continue
                 
             data = msg.getElement(BAR_DATA).getElement(BAR_TICK_DATA)
@@ -82,8 +94,8 @@ class bbgRequest():
                 close = bar.getElementAsFloat(CLOSE)
                 numEvents = bar.getElementAsInteger(NUM_EVENTS)
                 volume = bar.getElementAsInteger(VOLUME)
-                self.intradayBarResults.append([sid,time, open, high, low, close,numEvents, volume])
-
+                self.intradayBarResults.data.append([sid,time, open, high, low, close,numEvents, volume])
+                
     def processSecurity(self,sid):
 
         self.intradayBarRequest.set("security",sid)
@@ -109,7 +121,7 @@ class bbgRequest():
                         if msg.messageType() == SESSION_TERMINATED:
                             done = True
         
-    def sendIntradayBarRequest(self,sids,start=date.today(), end=datetime.today()+timedelta(days=1), event='TRADE', interval=1):
+    def sendIntradayBarRequest(self,sids,start=date.today(),end=datetime.today()+timedelta(days=1),event='TRADE',interval=1):
 
         """
         Parameters
@@ -121,12 +133,12 @@ class bbgRequest():
         """
 
         self.intradayBarRequest = self.refDataService.createRequest("IntradayBarRequest")
-
+                
         self.intradayBarRequest.set('eventType', event)
         self.intradayBarRequest.set('startDateTime', start)
         self.intradayBarRequest.set('endDateTime', end)
         self.intradayBarRequest.set('interval', interval)
-                      
+            
         # Open service to get historical data from
         if isinstance(sids,str):
             self.processSecurity(sids)
@@ -139,7 +151,7 @@ class bbgRequest():
     def processReferenceDataResponseEvent(self,event):
         for msg in event:
             if msg.hasElement(RESPONSE_ERROR):
-                printErrorInfo("REQUEST FAILED: ", msg.getElement(RESPONSE_ERROR))
+                self.printErrorInfo("REQUEST FAILED: ", msg.getElement(RESPONSE_ERROR))
                 continue
                         
             securities=msg.getElement('securityData')
@@ -163,9 +175,9 @@ class bbgRequest():
                             field_value=field_value[0]
                         
                     else:
-                        field_value='NA'
+                        field_value=np.nan
                         
-                    self.referenceDataResults.append([ticker,f,field_value])
+                    self.referenceDataResults.data.append([ticker,f,field_value])
             
     def referenceDataEventLoop(self):
 
@@ -212,6 +224,7 @@ class bbgRequest():
         self.session.sendRequest(self.referenceDataRequest)
         self.referenceDataEventLoop()
         
+        
 from bqwidgets import DatePicker,NameValueTable
 import ipywidgets as widgets
 from IPython.display import display
@@ -220,39 +233,55 @@ import pandas as pd
 from datetime import date,datetime,timedelta
 from bqviz.base_plots import VBox,HBox,LinePlot,BB_CLRS,Layout,BQV_LAYOUTS
 
-
+#分位分析用のフィールドと、ユニバース
 fields_for_percentile=['PX_TO_BOOK_RATIO','CUR_MKT_CAP','CURRENT_TRR_1MO','CURRENT_TRR_3MO']
+universe_options=['TPX', 'TPX100', 'TPX500', 'TPX1000', 'TPXC30', 'TPXL70', 'TPXM400', 'TPXSM']
 
-date_to=pd.Timestamp.today().strftime('%m-%d-%Y')
+date_to=(pd.Timestamp.now() - pd.Timedelta('9 hours')).strftime('%m-%d-%Y')
 date_from=(pd.Timestamp.today() - pd.Timedelta('100 days')).strftime('%m-%d-%Y')
 date_picker=DatePicker(max_date=date_to,min_date=date_from)
 button_run = widgets.Button(description='Load Bloomberg Data')
 button_chart = widgets.Button(description='Update the charts without data loading.')
 button_chart.layout.width = '300px'
-note=widgets.Label('It takes abount two minutes.\t')
+note=widgets.Label('It takes about seven minutes.')
+note_date=widgets.Label('Select a date from bbg calendar.')
 
 radio_btns = NameValueTable(data=[{'name':n} for n in range(2,6)], title='n-quantiles', selection_type='single')
 radio_btns.selected_data=['4']
-button_box=widgets.HBox([ button_run , note ])
-date_and_button = widgets.VBox([date_picker , button_box])
+
+date_and_button = widgets.VBox([widgets.HBox([ date_picker , note_date  ]), widgets.HBox([ button_run , note  ]) ])
 date_and_button.layout.width = '800px'
-header_box = widgets.HBox([date_and_button ,  radio_btns ])
+
+universe_select=widgets.Dropdown(options=universe_options,value='TPX500',description='Universe:',disabled=False,)
+universes=pd.DataFrame()
+
+empty_label=widgets.Label(' ')
+options_box=widgets.VBox([ universe_select , empty_label, radio_btns])
+options_box.layout.width = '450px'
+chart_update_box= widgets.HBox([options_box , widgets.VBox([empty_label]*4+[button_chart])])
+
 chart_box = widgets.HBox([])
 chart_box.layout.width = '1200px'
-main_box = widgets.VBox([header_box,button_chart,chart_box])
+dotted_line='---'
+main_box = widgets.VBox([date_and_button, widgets.Label(dotted_line*70),chart_update_box,chart_box])
 
 my_bbg=bbgRequest()
 
 
-def describe_chart(my_bbg):
+def describe_chart(my_bbg,universes):
     
     #クラスからデータ取り出し
-    prices=pd.DataFrame(my_bbg.intradayBarResults,columns=my_bbg.intradayBarColumns)
-    ref_data=pd.DataFrame(my_bbg.referenceDataResults,columns=my_bbg.referenceDataColumns)
-    
+    prices=my_bbg.intradayBarResults.as_frame()
+    ref_data=my_bbg.referenceDataResults.as_frame()
+    ref_data=ref_data.dropna()
+        
+    universe=universes.loc[universes.security==universe_select.value + ' Index'].iloc[0].value
+    universe=[s + ' Equity' for s in universe]
+    ref_data=ref_data.loc[[(s in universe) for s in ref_data.security]]
+        
     #棒チャート用
-    grouped=prices.groupby('security')
-    daily_rtn=(grouped.last().close/grouped.first().open-1)*100
+    temp=prices.groupby('security')
+    daily_rtn=(temp.last().close/temp.first().open-1)*100
     
     #pivot tableにして加工
     open_price=pd.pivot_table(prices,'open','time','security', aggfunc=min)
@@ -260,18 +289,19 @@ def describe_chart(my_bbg):
     last=close_price.iloc[-1]
     open_price.loc[last.name+timedelta(minutes=1)]=last    
     open_price.index+=timedelta(hours=9)
+    open_price=open_price.fillna(method='ffill')
     intraday_rtn=(open_price/open_price.shift(1)-1).fillna(0)
 
     #分位分析用    
     num_of_quantiles=int(radio_btns.selected_data[0])
     quantiles=[]
-    for f in fields_for_percentile:
-        slice=ref_data.loc[ref_data.field==f].copy()
-        slice.index=slice.security
-        quantiles.append(pd.qcut(slice.value,num_of_quantiles,labels=False))
+    for f,df in ref_data.groupby('field'):
+        
+        qtl=pd.qcut(pd.Series(df.value.data,index=df.security),num_of_quantiles,labels=False)
+        qtl.name=f
+        quantiles.append(qtl)
 
     quantiles=pd.concat(quantiles,axis=1)
-    quantiles.columns=fields_for_percentile
     quantiles['rtn']=daily_rtn
     
     port_daily_rtns=[]
@@ -297,38 +327,60 @@ def describe_chart(my_bbg):
     chart_box.children =[bar_chart,line_chart]
     
 def button_chart_on_click(_):
-    
+        
+    describe_chart(my_bbg,universes)
+    """
     try:
-        describe_chart(my_bbg)
+        describe_chart(my_bbg,universes)
     except:
         pass
-    
+    """
 def button_run_on_click(_):
     
+    #中身を一回空にする
+    my_bbg.clearAll()
+            
     #表示
     note.value='Loading data from bloomberg...'
     
-    #メンバーの取得
-    my_bbg.sendReferenceDataRequest('TPX500 Index','indx_members')
-    tpx500=[e + ' Equity' for e in my_bbg.referenceDataResults[-1][-1]]
-    my_bbg.clearReferenceResult()
-    
-    #属性
-    my_bbg.sendReferenceDataRequest(tpx500,fields=fields_for_percentile)
-    
-    #Intraday
+    #time counter
     start_time=datetime.now()
-    my_bbg.sendIntradayBarRequest(tpx500,
-                                  start=pd.Timestamp(date_picker.value),
-                                  end=pd.Timestamp(date_picker.value + ' 15:10:00'),
-                                  interval=1)
-            
-    note.value='This Data was updated at '+datetime.now().strftime('%H:%M:%S')
+        
+    #メンバーの取得
+    my_bbg.sendReferenceDataRequest([u+' Index' for u in universe_options],'indx_members')
     
-    describe_chart(my_bbg)
+    global universes
+    universes=my_bbg.referenceDataResults.as_frame()
+    tpx=universes.loc[universes.security=='TPX Index'].iloc[0].value
+    tpx=[e + ' Equity' for e in tpx]
+    my_bbg.referenceDataResults.clear()
+        
+    #属性
+    my_bbg.sendReferenceDataRequest(tpx,fields=fields_for_percentile)
     
-# Update all data, charts, and the data grid when a users clicks the Run button
+    #intraday
+    note.value='( 0 / ' + str(len(tpx)) +' ) '
+    batch_size=50
+    splited_tpx=[tpx[j:j+batch_size] for j in range(0,len(tpx),batch_size)]
+    from_datetime=pd.Timestamp(date_picker.value )
+    to_datetime=pd.Timestamp(date_picker.value + ' 15:10:00')
+    
+    f=lambda t :str(round(float(t)))
+    for i in range(len(splited_tpx)):
+        my_bbg.sendIntradayBarRequest(splited_tpx[i],
+                                      start=from_datetime,
+                                      end=to_datetime,
+                                      interval=1)
+        h,m,s=str(datetime.now()-start_time).split(':')
+        note.value='( '  + str((i+1)*batch_size) + ' / ' + str(len(tpx)) +' ) ' + f(m) + ' minutes ' + f(s) + ' seconds elapsed.'
+    
+    note.value='This Data was updated at '+datetime.now().strftime('%H:%M:%S') + '.' +  \
+                    ' ( It took ' + f(m) + 'minutes ' + f(s) + 'seconds.)' 
+    
+    describe_chart(my_bbg,universes)
+
 button_run.on_click(button_run_on_click)
 button_chart.on_click(button_chart_on_click)
+
 
 display(main_box)
