@@ -237,9 +237,9 @@ from bqviz.base_plots import VBox,HBox,LinePlot,BB_CLRS,Layout,BQV_LAYOUTS
 fields_for_percentile=['PX_TO_BOOK_RATIO','CUR_MKT_CAP','CURRENT_TRR_1MO','CURRENT_TRR_3MO']
 universe_options=['TPX', 'TPX100', 'TPX500', 'TPX1000', 'TPXC30', 'TPXL70', 'TPXM400', 'TPXSM']
 
-date_to=(pd.Timestamp.now() - pd.Timedelta('9 hours')).strftime('%m-%d-%Y')
+#date_to=(pd.Timestamp.now() - pd.Timedelta('9 hours')).strftime('%m-%d-%Y')
 date_from=(pd.Timestamp.today() - pd.Timedelta('100 days')).strftime('%m-%d-%Y')
-date_picker=DatePicker(max_date=date_to,min_date=date_from)
+date_picker=DatePicker(min_date=date_from)
 button_run = widgets.Button(description='Load Bloomberg Data')
 button_chart = widgets.Button(description='Update the charts without data loading.')
 button_chart.layout.width = '300px'
@@ -327,14 +327,18 @@ def describe_chart(my_bbg,universes):
     chart_box.children =[bar_chart,line_chart]
     
 def button_chart_on_click(_):
-        
-    describe_chart(my_bbg,universes)
-    """
-    try:
-        describe_chart(my_bbg,universes)
-    except:
-        pass
-    """
+    
+    if len(my_bbg.referenceDataResults.data)>0:
+    
+        try:
+            describe_chart(my_bbg,universes)
+        except:
+            print('An error occured while discribing the charts.') 
+            pass
+    
+    else:
+        print('Please download the data first.')
+    
 def button_run_on_click(_):
     
     #中身を一回空にする
