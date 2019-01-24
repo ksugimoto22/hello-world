@@ -330,12 +330,15 @@ input_to = DatePicker(description='To',
                      date_format=date_format)
 dates_box=widgets.HBox([input_from,input_to])
 
-radio_btns = NameValueTable(data=[{'name':'INDUSTRY_SECTOR'},{'name':'INDUSTRY_GROUP'},{'name':'INDUSTRY_SUBGROUP'}]
-                            , title='INDUSTRY', selection_type='single')
+radio_btns = NameValueTable(data=[{'name':'JAPANESE_INDUSTRY_GROUP_NAME'},{'name':'INDUSTRY_SECTOR'},{'name':'INDUSTRY_GROUP'},{'name':'INDUSTRY_SUBGROUP'}]
+                            , title='Group By', selection_type='single')
+radio_btns.selected_data=['JAPANESE_INDUSTRY_GROUP_NAME']
 
+data_btn=widgets.Button(description='Reload Data')
+data_btn.layout.width = '350px'
 period_btns=[widgets.Button(description=str(m) + ' M') for m in [1,2,3,6,12,36,60]]
-period_box=widgets.HBox(period_btns)
-period_box.layout.width = '400px'
+period_box=widgets.HBox(period_btns + [widgets.Label(' '),data_btn])
+period_box.layout.width = '550px'
 main_box = widgets.VBox([radio_btns  , widgets.Label(' '), dates_box , widgets.Label(' ')  ,period_box ])
 
 
@@ -440,7 +443,9 @@ def set_date_range(b):
     
     input_from.value=(date(y_from ,m_from,date.today().day)-timedelta(days=1)).strftime(date_format)
     
-def update_charts(group_name):
+def update_charts():
+    
+    group_name=group_names.loc[group_names.field==radio_btns.selected_data[0]]
     
     date_from_chart=datetime.strptime(input_from.value,date_format).date()
     date_to_chart=datetime.strptime(input_to.value,date_format).date()
@@ -464,12 +469,12 @@ def update_charts(group_name):
     
     #グラフの更新
     charts=widgets.Box([HorizontalGridPlot(relative_indices,cols=3).show()])
-    main_box.children = [radio_btns  , widgets.Label(' '), dates_box , widgets.Label(' ')  ,period_box , charts]
+    main_box.children = [radio_btns  , widgets.Label(' '), dates_box , widgets.Label(' ')  ,period_box  , charts]
     
 def on_change_dates(change):
     if change['type'] == 'change' and change['name'] == 'value':
         try:
-            update_charts(group_name)
+            update_charts()
         except:
             pass
             
@@ -480,42 +485,44 @@ def on_change_radio_btns(change):
         group_name=group_names.loc[group_names.field==radio_btns.selected_data[0]]
         
         try:
-            update_charts(group_name)
+            update_charts()
         except:
             pass
-    
-#メインの処理開始
-#global mybbg,tpx500,rtns,tpx
-mybbg=bbgRequest()        
-mybbg.sendReferenceDataRequest('TPX500 Index','indx_members')
-tpx500=[code+ ' Equity' for code in mybbg.referenceDataResults.data[0][2]]
-
-#期間
-date_from_data=(date.today()-timedelta(days=365*5))
-date_to_data=date.today()
-
-#TPX500全銘柄の日次トータルリターンを取得
-mybbg.sendHistoricalDataRequest(tpx500,'DAY_TO_DAY_TOT_RETURN_GROSS_DVDS',start=date_from_data,end=date_to_data)
-rtns=mybbg.historicalDataResults.as_frame().pivot(index='date',columns='security',values='value').fillna(0)
-
-mybbg.referenceDataResults.clear()
-groups=[a['name'] for a in radio_btns.data]
-mybbg.sendReferenceDataRequest(tpx500,groups)
-group_names=mybbg.referenceDataResults.as_frame()
-
-#TOPIX配当込指数を取得
-mybbg.historicalDataResults.clear()
-mybbg.sendHistoricalDataRequest('TPXDDVD Index','PX_LAST',start=date_from_data,end=date_to_data)
-tpx=mybbg.historicalDataResults.as_frame().pivot(index='date',columns='security',values='value')
-
-group_name=group_names.loc[group_names.field=='INDUSTRY_SECTOR']
-update_charts(group_name)
         
-# Update all data, charts, and the data grid when a users clicks the Run button
+def update_data(_):
+    
+    #メインの処理開始
+    global mybbg,tpx500,rtns,tpx,group_names
+    mybbg=bbgRequest()        
+    mybbg.sendReferenceDataRequest('TPX500 Index','indx_members')
+    tpx500=[code+ ' Equity' for code in mybbg.referenceDataResults.data[0][2]]
+
+    #期間
+    date_from_data=(date.today()-timedelta(days=365*5))
+    date_to_data=date.today()
+
+    #TPX500全銘柄の日次トータルリターンを取得
+    mybbg.sendHistoricalDataRequest(tpx500,'DAY_TO_DAY_TOT_RETURN_GROSS_DVDS',start=date_from_data,end=date_to_data)
+    rtns=mybbg.historicalDataResults.as_frame().pivot(index='date',columns='security',values='value').fillna(0)
+
+    mybbg.referenceDataResults.clear()
+    groups=[a['name'] for a in radio_btns.data]
+    mybbg.sendReferenceDataRequest(tpx500,groups)
+    group_names=mybbg.referenceDataResults.as_frame()
+
+    #TOPIX配当込指数を取得
+    mybbg.historicalDataResults.clear()
+    mybbg.sendHistoricalDataRequest('TPXDDVD Index','PX_LAST',start=date_from_data,end=date_to_data)
+    tpx=mybbg.historicalDataResults.as_frame().pivot(index='date',columns='security',values='value')
+    input_to.value=(tpx.index[-1]).strftime(date_format)
+    
+update_data(0)
 input_to.observe(on_change_dates)
 input_from.observe(on_change_dates)
 radio_btns.observe(on_change_radio_btns)
+data_btn.on_click(update_data)
 for b in period_btns:
     b.on_click(set_date_range)
-    
+
+update_charts()  
 display(main_box)
