@@ -433,15 +433,28 @@ class HorizontalGridPlot(bqv.GridPlot):
 def set_date_range(b):
     
     m=int(b.description.split(' ')[0])
-    input_to.value=(date.today()-timedelta(days=1)).strftime(date_format)
-        
-    y_from=date.today().year-m//12
-    m_from=date.today().month-m%12
-    if m_from<=0:
-        y_from-=1
-        m_from+=12
     
-    input_from.value=(date(y_from ,m_from,date.today().day)-timedelta(days=1)).strftime(date_format)
+    latest_date=rtns.index[-1]
+    input_to.value=(latest_date).strftime(date_format)
+    
+    if m==1:
+        input_from.value=(latest_date-timedelta(days=31)).strftime(date_format)
+    elif m==2:
+        input_from.value=(latest_date-timedelta(days=61)).strftime(date_format)
+    elif m==3:
+        input_from.value=(latest_date-timedelta(days=92)).strftime(date_format)
+    elif m==6:
+        input_from.value=(latest_date-timedelta(days=183)).strftime(date_format)
+    elif m==12:
+        input_from.value=(latest_date-timedelta(days=365)).strftime(date_format)
+    elif m==24:
+        input_from.value=(latest_date-timedelta(days=365*2)).strftime(date_format)
+    elif m==36:
+        input_from.value=(latest_date-timedelta(days=365*3+1)).strftime(date_format)
+    elif m==60:
+        input_from.value=(latest_date-timedelta(days=365*5+1)).strftime(date_format)
+    else:
+        pass
     
 def update_charts():
     
@@ -450,7 +463,7 @@ def update_charts():
     date_from_chart=datetime.strptime(input_from.value,date_format).date()
     date_to_chart=datetime.strptime(input_to.value,date_format).date()
     date_range_sec=[date_from_chart <= d <= date_to_chart for d in rtns.index]
-    date_range_idx=[date_from_chart <= d <= date_to_chart for d in tpx.index]
+    date_range_idx=[date_from_chart <= d <= date_to_chart for d in tpx_idx.index]
     
     result=[]
     cols=[]
@@ -464,7 +477,7 @@ def update_charts():
     tot_rtn_indices=pd.concat(result,axis=1)
     tot_rtn_indices.columns=cols
 
-    relative_indices=100*(tot_rtn_indices).divide(tpx.loc[date_range_idx,'TPXDDVD Index'],axis=0).dropna()*tpx.loc[date_range_idx].iloc[0][0]
+    relative_indices=100*(tot_rtn_indices).divide(tpx_idx.loc[date_range_idx,'TPX Index'],axis=0).dropna()*tpx_idx.loc[date_range_idx].iloc[0][0]
     relative_indices.index=relative_indices.index.map(lambda d:d.strftime('%d-%b-%y'))
     
     #グラフの更新
@@ -492,7 +505,7 @@ def on_change_radio_btns(change):
 def update_data(_):
     
     #メインの処理開始
-    global mybbg,tpx500,rtns,tpx,group_names
+    global mybbg,tpx500,rtns,tpx_idx,group_names
     mybbg=bbgRequest()        
     mybbg.sendReferenceDataRequest('TPX500 Index','indx_members')
     tpx500=[code+ ' Equity' for code in mybbg.referenceDataResults.data[0][2]]
@@ -512,9 +525,10 @@ def update_data(_):
 
     #TOPIX配当込指数を取得
     mybbg.historicalDataResults.clear()
-    mybbg.sendHistoricalDataRequest('TPXDDVD Index','PX_LAST',start=date_from_data,end=date_to_data)
-    tpx=mybbg.historicalDataResults.as_frame().pivot(index='date',columns='security',values='value')
-    input_to.value=(tpx.index[-1]).strftime(date_format)
+    mybbg.sendHistoricalDataRequest('TPX Index','DAY_TO_DAY_TOT_RETURN_GROSS_DVDS',start=date_from_data,end=date_to_data)
+    tpx_rtn=mybbg.historicalDataResults.as_frame().pivot(index='date',columns='security',values='value')
+    tpx_idx=(1+tpx_rtn/100).cumprod()
+    input_to.value=(rtns.index[-1]).strftime(date_format)
     
 update_data(0)
 input_to.observe(on_change_dates)
