@@ -324,7 +324,7 @@ input_from = DatePicker(description='From',
                        max_date=(date.today()-timedelta(days=7)).strftime(date_format),
                        date_format=date_format)
 input_to = DatePicker(description='To',
-                      value=(date.today()-timedelta(days=1)).strftime(date_format),
+                      value=(date.today()).strftime(date_format),
                      min_date=(date.today()-timedelta(days=365*5-7)).strftime(date_format),
                      date_format=date_format)
 dates_box=widgets.HBox([input_from,input_to])
@@ -432,15 +432,28 @@ class HorizontalGridPlot(bqv.GridPlot):
 def set_date_range(b):
     
     m=int(b.description.split(' ')[0])
-    input_to.value=(date.today()-timedelta(days=1)).strftime(date_format)
-        
-    y_from=date.today().year-m//12
-    m_from=date.today().month-m%12
-    if m_from<=0:
-        y_from-=1
-        m_from+=12
     
-    input_from.value=(date(y_from ,m_from,date.today().day)-timedelta(days=1)).strftime(date_format)
+    latest_date=relative_prices.index[-1]
+    input_to.value=(latest_date).strftime(date_format)
+    
+    if m==1:
+        input_from.value=(latest_date-timedelta(days=31)).strftime(date_format)
+    elif m==2:
+        input_from.value=(latest_date-timedelta(days=61)).strftime(date_format)
+    elif m==3:
+        input_from.value=(latest_date-timedelta(days=92)).strftime(date_format)
+    elif m==6:
+        input_from.value=(latest_date-timedelta(days=183)).strftime(date_format)
+    elif m==12:
+        input_from.value=(latest_date-timedelta(days=365)).strftime(date_format)
+    elif m==24:
+        input_from.value=(latest_date-timedelta(days=365*2)).strftime(date_format)
+    elif m==36:
+        input_from.value=(latest_date-timedelta(days=365*3+1)).strftime(date_format)
+    elif m==60:
+        input_from.value=(latest_date-timedelta(days=365*5+1)).strftime(date_format)
+    else:
+        pass
     
 def update_charts():
         
@@ -521,6 +534,10 @@ def button_run_on_click(_):
         
         #自分のプライスは相対ではなく元データにする
         relative_prices.iloc[:,0]=target
+        
+        #最新データ
+        latest_date=relative_prices.index[-1]
+        input_to.value=(latest_date).strftime(date_format)
         
     #グラフの更新
     update_charts()
