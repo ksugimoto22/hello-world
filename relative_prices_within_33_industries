@@ -431,15 +431,28 @@ class HorizontalGridPlot(bqv.GridPlot):
 def set_date_range(b):
     
     m=int(b.description.split(' ')[0])
-    input_to.value=(date.today()-timedelta(days=1)).strftime(date_format)
-        
-    y_from=date.today().year-m//12
-    m_from=date.today().month-m%12
-    if m_from<=0:
-        y_from-=1
-        m_from+=12
     
-    input_from.value=(date(y_from ,m_from,date.today().day)-timedelta(days=1)).strftime(date_format)
+    latest_date=rtns.index[-1]
+    input_to.value=(latest_date).strftime(date_format)
+    
+    if m==1:
+        input_from.value=(latest_date-timedelta(days=31)).strftime(date_format)
+    elif m==2:
+        input_from.value=(latest_date-timedelta(days=61)).strftime(date_format)
+    elif m==3:
+        input_from.value=(latest_date-timedelta(days=92)).strftime(date_format)
+    elif m==6:
+        input_from.value=(latest_date-timedelta(days=183)).strftime(date_format)
+    elif m==12:
+        input_from.value=(latest_date-timedelta(days=365)).strftime(date_format)
+    elif m==24:
+        input_from.value=(latest_date-timedelta(days=365*2)).strftime(date_format)
+    elif m==36:
+        input_from.value=(latest_date-timedelta(days=365*3+1)).strftime(date_format)
+    elif m==60:
+        input_from.value=(latest_date-timedelta(days=365*5+1)).strftime(date_format)
+    else:
+        pass
     
 def update_charts():
     
@@ -495,13 +508,16 @@ def update_data(_):
     tpx500=[code+ ' Equity' for code in mybbg.referenceDataResults.data[0][2]]
 
     #期間
-    date_from_data=(date.today()-timedelta(days=365*5))
+    date_from_data=(date.today()-timedelta(days=365*5+2))
     date_to_data=date.today()
 
     #TPX500全銘柄の日次トータルリターンを取得
     mybbg.sendHistoricalDataRequest(tpx500,'DAY_TO_DAY_TOT_RETURN_GROSS_DVDS',start=date_from_data,end=date_to_data)
     rtns=mybbg.historicalDataResults.as_frame().pivot(index='date',columns='security',values='value').fillna(0)
     
+    mybbg.historicalDataResults.clear()
+    mybbg.sendHistoricalDataRequest(tpx500,'PX_LAST',start=rtns.index[-1],end=date.today())
+        
     #業種取得
     mybbg.referenceDataResults.clear()
     mybbg.sendReferenceDataRequest(tpx500,['Japanese Industry Group Number','JAPANESE_INDUSTRY_GROUP_NAME','CUR_MKT_CAP','NAME_KANJI'])
