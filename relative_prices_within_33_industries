@@ -325,7 +325,7 @@ input_from = DatePicker(description='From',
                        max_date=(date.today()-timedelta(days=7)).strftime(date_format),
                        date_format=date_format)
 input_to = DatePicker(description='To',
-                      value=(date.today()-timedelta(days=1)).strftime(date_format),
+                      value=date(1900,1,1).strftime(date_format),
                      min_date=(date.today()-timedelta(days=365*5-7)).strftime(date_format),
                      date_format=date_format)
 dates_box=widgets.HBox([input_from,input_to])
@@ -335,8 +335,10 @@ industry_selection=widgets.Dropdown(description='Industry:',disabled=False,)
 data_btn=widgets.Button(description='Reload Data')
 data_btn.layout.width = '350px'
 period_btns=[widgets.Button(description=str(m) + ' M') for m in [1,2,3,6,12,24,36,60]]
-period_box=widgets.HBox(period_btns + [widgets.Label(' '),data_btn])
-period_box.layout.width = '575px'
+message_area=widgets.Label(' ')
+message_area.layout.width = '350px'
+period_box=widgets.HBox(period_btns + [widgets.Label(' '),data_btn ,message_area])
+period_box.layout.width = '775px'
 main_box = widgets.VBox([industry_selection  , widgets.Label(' '), dates_box , widgets.Label(' ')  ,period_box ])
 
 
@@ -481,7 +483,7 @@ def update_charts():
     
     #グラフの更新
     charts=widgets.Box([HorizontalGridPlot(chart_df,cols=3).show()])
-    main_box.children = [industry_selection  , widgets.Label(' '), dates_box , widgets.Label(' ')  ,period_box  , charts]
+    main_box.children = [industry_selection  , widgets.Label(' '), dates_box , widgets.Label(' ')  ,period_box  , charts ]
     
 def on_change_dates(change):
     if change['type'] == 'change' and change['name'] == 'value':
@@ -500,6 +502,8 @@ def on_change_industry(change):
             pass
         
 def update_data(_):
+    
+    message_area.value='Now Loading.....'
     
     #メインの処理開始
     global mybbg,tpx500,rtns,ref_data
@@ -524,8 +528,15 @@ def update_data(_):
     
     ref_data=mybbg.referenceDataResults.as_frame().pivot(index='security',columns='field',values='value')
     ref_data=ref_data.sort_values(by='CUR_MKT_CAP',ascending=False)
-
-    input_to.value=(rtns.index[-1]).strftime(date_format)
+    
+    last_date=(rtns.index[-1]).strftime(date_format)
+    if last_date==input_to.value:
+        update_charts()
+    else:
+        #on_change_datesに繋がる
+        input_to.value=last_date
+    
+    message_area.value=' '
     
 update_data(0)
 industry_selection.options=[df.iloc[0] for i,df in ref_data.groupby('Japanese Industry Group Number')['JAPANESE_INDUSTRY_GROUP_NAME']]
@@ -537,6 +548,6 @@ data_btn.on_click(update_data)
 
 for b in period_btns:
     b.on_click(set_date_range)
-
-update_charts()  
+  
 display(main_box)
+update_charts()
