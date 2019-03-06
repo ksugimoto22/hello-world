@@ -588,8 +588,8 @@ def update_data(_):
     message_area.value=' '
     
 update_data(0)
-input_to.observe(on_change_dates)
-input_from.observe(on_change_dates)
+input_to.observe(on_change)
+input_from.observe(on_change)
 data_btn.on_click(update_data)
 half_life.observe(on_change)
 for b in period_btns:
