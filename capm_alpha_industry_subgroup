@@ -340,6 +340,13 @@ input_to = DatePicker(description='To',
                      min_date=(date.today()-timedelta(days=365*5-7)).strftime(date_format),
                      date_format=date_format)
 dates_box=widgets.HBox([input_from,input_to])
+half_life=widgets.IntText(
+                        value=20,
+                        description='Sort by trend-following performance with half-life (business days):',
+                        disabled=False,
+                        style={'description_width': 'initial'}
+)
+half_life.layout.width = '450px'
 
 data_btn=widgets.Button(description='Reload Data')
 data_btn.layout.width = '350px'
@@ -349,7 +356,7 @@ message_area=widgets.Label(' ')
 message_area.layout.width = '350px'
 period_box=widgets.HBox(period_btns + [widgets.Label(' '),data_btn ,message_area])
 period_box.layout.width = '775px'
-main_box = widgets.VBox([ widgets.Label(' '), dates_box , widgets.Label(' ')  ,period_box ])
+main_box = widgets.VBox([half_life  , widgets.Label(' '), dates_box , widgets.Label(' ')  ,period_box ])
 
 
 #横向きに並べたかったので、GridPlotを継承したクラスを自作した
@@ -479,12 +486,21 @@ def update_charts():
     
     cum_alpha=industry_alpha.loc[date_range_sec].cumsum()
     cum_alpha.index=cum_alpha.index.map(lambda d:d.date().strftime('%d-%b-%y'))
+        
+    trend=(industry_alpha.ewm(halflife=half_life.value).mean()/industry_alpha.ewm(halflife=half_life.value).std()).dropna()*10
+    f=lambda v:v if -1<v<1 else np.sign(v)
+    trend=trend.applymap(f).shift(1)
     
+    trend_follow=industry_alpha*trend
+    
+    cum_alpha.loc[-1]=trend_follow.loc[date_range_sec].sum()/industry_alpha.loc[date_range_sec].std()
+    cum_alpha=cum_alpha.sort_values(axis=1,by=-1,ascending=False).iloc[:-1]
+        
     #グラフの更新
     charts=widgets.Box([HorizontalGridPlot(cum_alpha,cols=3).show()])
-    main_box.children = [widgets.Label(' '), dates_box , widgets.Label(' ')  ,period_box  , charts]
+    main_box.children = [half_life  ,widgets.Label(' '), dates_box , widgets.Label(' ')  ,period_box  , charts]
     
-def on_change_dates(change):
+def on_change(change):
     if change['type'] == 'change' and change['name'] == 'value':
         try:
             update_charts()
@@ -551,7 +567,7 @@ def update_data(_):
     get_keys=lambda t:keys.loc[keys.security==t].value.values[0]
     for g,df in capm_alpha.groupby(capm_alpha.columns.map(get_keys),axis=1):
 
-        if len(df.columns)>=5:
+        if len(df.columns)>=3:
             df2=pd.concat([df,h.loc[:,[t in df.columns for t in h.columns]]],join='outer',axis=1)
             df2.iloc[:,len(df.columns):]=df2.iloc[:,len(df.columns):].shift(1).fillna(method='ffill')
             df2.dropna()
@@ -575,6 +591,7 @@ update_data(0)
 input_to.observe(on_change_dates)
 input_from.observe(on_change_dates)
 data_btn.on_click(update_data)
+half_life.observe(on_change)
 for b in period_btns:
     b.on_click(set_date_range)
 
