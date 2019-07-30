@@ -1,0 +1,44 @@
+import sbbg
+import pandas as pd
+import numpy as np
+import bbg
+from datetime import date,timedelta
+
+mybbg=bbg.bbgRequest()
+
+print('getting universe...')
+mybbg.sendReferenceDataRequest('TPX1000 Index','INDX_MEMBERS')
+univ=mybbg.referenceDataResults.data[0][-1]
+univ=[id + ' Equity' for id in univ]
+
+#univ=['3092 JT Equity','7453 JT Equity','2670 JT Equity','7532 JT Equity','2651 JT Equity','TPX Index']
+
+print('getting intraday_rtn...')
+
+mybbg.sendIntradayBarRequest(univ,start=date.today()-timedelta(days=300),end=date.today()+timedelta(days=1),interval=5)
+bbg_data=mybbg.intradayBarResults.as_frame()
+
+print('calclating...')
+
+test=np.log(bbg_data.pivot(index='time',columns='security',values='close'))
+
+g=test.groupby(test.index.date)
+result=pd.DataFrame(index=g.groups.keys(),columns=test.columns)
+
+for i,df in g:
+    temp=df.fillna(method='ffill').diff()
+    result.loc[i]= temp.sum()/temp.std()/(60**0.5)
+
+result=result.iloc[:,:-1]
+hl05=result.ewm(halflife=10).mean().iloc[22:]
+hl10.to_csv('intra_sharp_05.csv')
+
+hl10=result.ewm(halflife=10).mean().iloc[22:]
+hl10.to_csv('intra_sharp_10.csv')
+
+hl20=result.ewm(halflife=20).mean().iloc[22:]
+hl20.to_csv('intra_sharp_20.csv')
+
+(hl10-hl20).to_csv('difference.csv')
+
+#test.to_csv('prices.csv')
