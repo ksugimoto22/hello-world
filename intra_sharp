@@ -7,7 +7,7 @@ from datetime import date,timedelta
 mybbg=bbg.bbgRequest()
 
 print('getting universe...')
-mybbg.sendReferenceDataRequest('TPX1000 Index','INDX_MEMBERS')
+mybbg.sendReferenceDataRequest('TPX500 Index','INDX_MEMBERS')
 univ=mybbg.referenceDataResults.data[0][-1]
 univ=[id + ' Equity' for id in univ]
 
@@ -30,15 +30,7 @@ for i,df in g:
     result.loc[i]= temp.sum()/temp.std()/(60**0.5)
 
 result=result.iloc[:,:-1]
-hl05=result.ewm(halflife=10).mean().iloc[22:]
-hl10.to_csv('intra_sharp_05.csv')
 
-hl10=result.ewm(halflife=10).mean().iloc[22:]
-hl10.to_csv('intra_sharp_10.csv')
-
-hl20=result.ewm(halflife=20).mean().iloc[22:]
-hl20.to_csv('intra_sharp_20.csv')
-
-(hl10-hl20).to_csv('difference.csv')
-
-#test.to_csv('prices.csv')
+hl_list=[5,10,20]
+for hl in hl_list:
+    result.ewm(halflife=hl).mean().iloc[22:].rank(axis=1,pct=True).to_csv(str(100+hl)[-2:] + '.csv')
